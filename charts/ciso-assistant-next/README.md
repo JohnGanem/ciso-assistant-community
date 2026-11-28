@@ -1,6 +1,6 @@
 # ciso-assistant
 
-![Version: 0.15.1](https://img.shields.io/badge/Version-0.15.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v4.3.2](https://img.shields.io/badge/AppVersion-v4.3.2-informational?style=flat-square)
+![Version: 0.15.2](https://img.shields.io/badge/Version-0.15.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v4.3.4](https://img.shields.io/badge/AppVersion-v4.3.4-informational?style=flat-square)
 
 A Helm chart for CISO Assistant k8s's deployment
 
@@ -58,6 +58,18 @@ the scheduler interval can be changed without editing the chart :
 backend:
   huey:
     args: ["-c", "python manage.py run_huey -w 4 --scheduler-interval 30"]
+```
+
+### ingress-nginx returns 502
+
+The frontend can send response headers larger than the default ingress-nginx proxy buffer, and the
+ingress then answers 502. Raise the buffer through the ingress annotations :
+
+```yaml
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
 ```
 
 ### Qdrant (AI assistant / RAG)

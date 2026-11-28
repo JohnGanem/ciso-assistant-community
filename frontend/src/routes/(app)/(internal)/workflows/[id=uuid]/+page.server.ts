@@ -51,21 +51,31 @@ export const load: PageServerLoad = async ({ fetch, params, url }) => {
 	const creatableModels = listResults(creatableModelsRaw);
 	// Only the small relation targets are fetched as pickers; controls,
 	// evidences and assets are templated from an upstream node instead.
+	// Requirement assessments run to thousands (every requirement of every audit)
+	// and always come from the trigger or an upstream step, so their picker
+	// offers only variables.
+	const templatedOnly = new Set(['requirement-assessments']);
 	const fkEndpoints = [
 		...new Set([
-			...creatableModels.flatMap((entry: any) => Object.values(entry.fk_fields ?? {})),
+			...creatableModels
+				.flatMap((entry: any) => Object.values(entry.fk_fields ?? {}))
+				.filter((endpoint: any) => !templatedOnly.has(endpoint)),
 			'folders',
 			'actors',
 			'filtering-labels',
 			'frameworks'
 		])
 	] as string[];
+	// The option lists also label the values saved on a node, so actors keep
+	// the deactivated users a node may still reference.
+	const fkQuery: Record<string, string> = { actors: '?include_inactive=true' };
 	const fkOptions: Record<string, any[]> = {};
 	await Promise.all(
 		fkEndpoints.map(async (endpoint) => {
-			fkOptions[endpoint] = await fetchAllPages(fetch, `${BASE_API_URL}/${endpoint}/`).catch(
-				() => []
-			);
+			fkOptions[endpoint] = await fetchAllPages(
+				fetch,
+				`${BASE_API_URL}/${endpoint}/${fkQuery[endpoint] ?? ''}`
+			).catch(() => []);
 		})
 	);
 

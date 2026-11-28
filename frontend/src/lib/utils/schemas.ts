@@ -644,6 +644,7 @@ export const ComplianceAssessmentSchema = z.object({
 	authors: z.array(z.string().optional()).optional(),
 	reviewers: z.array(z.string().optional()).optional(),
 	baseline: z.string().optional().nullable(),
+	reset_status: z.boolean().optional().default(false),
 	create_applied_controls_from_suggestions: z.boolean().optional().default(false),
 	observation: z.string().optional().nullable(),
 	ebios_rm_studies: z.string().uuid().optional().array().optional(),
@@ -743,6 +744,7 @@ export const GeneralSettingsSchema = z.object({
 	mapping_max_depth: z.coerce.number().int().min(2).max(5).default(3).optional(),
 	allow_self_validation: z.boolean().default(false).optional(),
 	evidence_four_eyes: z.boolean().default(false).optional(),
+	auto_lock_overdue_assessments: z.boolean().default(false).optional(),
 	auto_ref_id: z.boolean().default(false).optional(),
 	auto_ref_id_prefixes: z.record(z.string(), z.string()).default({}).optional(),
 	show_warning_external_links: z.boolean().default(true).optional(),
@@ -2265,7 +2267,8 @@ export const ManagedDocumentSchema = z.object({
 	document_type: z.string().optional().default('policy'),
 	policy: z.string().uuid().optional().nullable(),
 	folder: z.string(),
-	template_used: z.string().optional().nullable()
+	template_used: z.string().optional().nullable(),
+	initial_version: z.number().int().min(1).max(9999).optional()
 });
 
 export const DocumentRevisionSchema = z.object({

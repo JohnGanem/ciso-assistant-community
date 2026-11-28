@@ -6,6 +6,7 @@
 
 	import { page } from '$app/state';
 	import { goto } from '#lib/utils/breadcrumbs.js';
+	import { afterNavigate } from '$app/navigation';
 	import AutocompleteSelect from '#lib/components/Forms/AutocompleteSelect.svelte';
 	import { setContext } from 'svelte';
 	import SuperForm from '#lib/components/Forms/Form.svelte';
@@ -449,12 +450,43 @@
 		if (isAuditor) return 'security_exceptions';
 		return 'applied_controls';
 	}
-	let group = $state(pickDefaultTab());
+	// ?tab= opens a given tab (e.g. evidences from the auditor pre-read), if the user may see it.
+	const TAB_SHOWN: Record<string, () => boolean> = {
+		applied_controls: () => canShowAppliedControls,
+		task_templates: () => showTaskTemplates,
+		evidences: () => showEvidences,
+		findings: () => showFindings,
+		security_exceptions: () => isAuditor
+	};
+	const askedTab = page.url.searchParams.get('tab') ?? '';
+	const openAskedTab = !!TAB_SHOWN[askedTab]?.();
+	let group = $state(openAskedTab ? askedTab : pickDefaultTab());
+	let tabsEl: HTMLElement | undefined = $state();
+	// After SvelteKit's own scroll to the top, on a client-side visit too.
+	// ?focus=result lands on the result field (assess or justify from the auditor pre-read).
+	afterNavigate(() => {
+		if (page.url.searchParams.get('focus') === 'result')
+			document.querySelector('[data-testid="result-field"]')?.scrollIntoView({ block: 'center' });
+		else if (openAskedTab) tabsEl?.scrollIntoView({ block: 'start' });
+	});
 
 	// Refresh AutompleteSelect to assign created applied control/evidence
 	let refreshKey = $state(false);
 
 	let formStore = $derived(requirementAssessmentForm.form);
+	const tabFormData = requirementAssessmentForm.form;
+	// The form keeps links the user cannot see so a save preserves them; badges count only the visible ones.
+	const hiddenLinks = $derived(
+		Object.fromEntries(
+			['applied_controls', 'task_templates', 'evidences', 'security_exceptions'].map((field) => {
+				const visible = new Set((data.requirementAssessment[field] ?? []).map((o: any) => o?.id));
+				return [
+					field,
+					new Set((data.form.data[field] ?? []).filter((id: string) => !visible.has(id)))
+				];
+			})
+		)
+	);
 	// Entering a score is what makes a requirement scored (as in table mode).
 	function markScored() {
 		requirementAssessmentForm.form.update((d) => ({ ...d, is_scored: true }));
@@ -710,7 +742,7 @@
 		>
 			{#snippet children({ form, data })}
 				{#if canShowAppliedControls || showTaskTemplates || showEvidences || showFindings || isAuditor}
-					<div class="card shadow-lg bg-surface-50-950">
+					<div class="card shadow-lg bg-surface-50-950 scroll-mt-28" bind:this={tabsEl}>
 						<Tabs
 							value={group}
 							onValueChange={(e) => {
@@ -720,21 +752,35 @@
 							<Tabs.List>
 								{#if canShowAppliedControls}
 									<Tabs.Trigger value="applied_controls" data-testid="applied-controls-tab"
-										>{m.appliedControls()}</Tabs.Trigger
+										>{m.appliedControls()}{@render tabCount(
+											$tabFormData.applied_controls,
+											'applied_controls'
+										)}</Tabs.Trigger
 									>
 								{/if}
 								{#if showTaskTemplates}
 									<Tabs.Trigger value="task_templates" data-testid="task-templates-tab"
-										>{m.taskTemplates()}</Tabs.Trigger
+										>{m.taskTemplates()}{@render tabCount(
+											$tabFormData.task_templates,
+											'task_templates'
+										)}</Tabs.Trigger
 									>
 								{/if}
 								{#if showEvidences}
 									<Tabs.Trigger value="evidences" data-testid="evidences-tab"
-										>{m.evidences()}</Tabs.Trigger
+										>{m.evidences()}{@render tabCount(
+											$tabFormData.evidences,
+											'evidences'
+										)}</Tabs.Trigger
 									>
 								{/if}
 								{#if isAuditor}
-									<Tabs.Trigger value="security_exceptions">{m.securityExceptions()}</Tabs.Trigger>
+									<Tabs.Trigger value="security_exceptions"
+										>{m.securityExceptions()}{@render tabCount(
+											$tabFormData.security_exceptions,
+											'security_exceptions'
+										)}</Tabs.Trigger
+									>
 								{/if}
 								{#if showFindings}
 									<Tabs.Trigger value="findings" data-testid="findings-tab"
@@ -1287,3 +1333,10 @@
 		<CommentsPanel parentType="requirement_assessment" parentId={data.requirementAssessment.id} />
 	{/if}
 </div>
+
+{#snippet tabCount(ids: unknown, field: string)}
+	{@const count = Array.isArray(ids) ? ids.filter((id) => !hiddenLinks[field]?.has(id)).length : 0}
+	{#if count}
+		<span class="ml-2 rounded-full px-2 py-0.5 text-xs preset-tonal-secondary">{count}</span>
+	{/if}
+{/snippet}

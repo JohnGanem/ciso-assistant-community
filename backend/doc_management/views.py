@@ -4,7 +4,6 @@ import mimetypes
 import re
 from uuid import UUID
 
-import requests
 import structlog
 from django.contrib.auth.models import Permission
 from django.db import models, transaction
@@ -16,6 +15,7 @@ from django.utils.text import slugify
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.fields import IntegerField
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import (
     FileUploadParser,
@@ -29,7 +29,7 @@ from weasyprint.urls import URLFetcher, URLFetcherResponse
 
 import django_filters as df
 
-from core.net_safety import BlockedRequestError, assert_public_url
+from core.net_safety import BlockedRequestError, assert_public_url, public_get
 from core.typst_render import render_mermaid_svg
 from core.utils import get_report_timezone
 from core.validators import validate_file_name, validate_file_size
@@ -157,6 +157,19 @@ def _queue_review_notification(request, revision):
         )
 
 
+def _initial_version(request):
+    """First revision number for upload/link creates; None when invalid."""
+    raw = request.data.get("initial_version")
+    if raw is None or raw == "":
+        return 1
+    if isinstance(raw, bool):
+        return None
+    try:
+        return IntegerField(min_value=1, max_value=9999).run_validation(raw)
+    except ValidationError:
+        return None
+
+
 def _get_user_lang(request):
     """Get the user's preferred language from their preferences."""
     if hasattr(request, "user") and hasattr(request.user, "get_preferences"):
@@ -180,7 +193,7 @@ class _SafeURLFetcher(URLFetcher):
         if url.startswith("data:"):
             return _DATA_URL_FETCHER.fetch(url)
         assert_public_url(url, allowed_schemes=("https",))
-        r = requests.get(url, timeout=self._timeout, allow_redirects=False, stream=True)
+        r = public_get(url, timeout=self._timeout, allow_redirects=False, stream=True)
         try:
             status_code = r.status_code
             final_url = r.url
@@ -487,6 +500,12 @@ class DocumentContainerViewSet(PublishedReadMixin, BaseModelViewSet):
             return Response(
                 {"document_type": "Invalid."}, status=status.HTTP_400_BAD_REQUEST
             )
+        initial_version = _initial_version(request)
+        if initial_version is None:
+            return Response(
+                {"initial_version": "Must be an integer between 1 and 9999."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         with transaction.atomic():
             container = DocumentContainer.objects.create(
@@ -503,7 +522,7 @@ class DocumentContainerViewSet(PublishedReadMixin, BaseModelViewSet):
             # as authored documents.
             revision = DocumentRevision.objects.create(
                 document=document,
-                version_number=1,
+                version_number=initial_version,
                 source=DocumentRevision.Source.UPLOADED,
                 file=upload,
                 status=DocumentRevision.Status.DRAFT,
@@ -558,6 +577,12 @@ class DocumentContainerViewSet(PublishedReadMixin, BaseModelViewSet):
             return Response(
                 {"document_type": "Invalid."}, status=status.HTTP_400_BAD_REQUEST
             )
+        initial_version = _initial_version(request)
+        if initial_version is None:
+            return Response(
+                {"initial_version": "Must be an integer between 1 and 9999."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         with transaction.atomic():
             container = DocumentContainer.objects.create(
@@ -572,7 +597,7 @@ class DocumentContainerViewSet(PublishedReadMixin, BaseModelViewSet):
             )
             revision = DocumentRevision.objects.create(
                 document=document,
-                version_number=1,
+                version_number=initial_version,
                 source=DocumentRevision.Source.LINK,
                 url=url,
                 status=DocumentRevision.Status.DRAFT,

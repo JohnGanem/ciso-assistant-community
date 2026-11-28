@@ -89,6 +89,7 @@ GENERAL_SETTINGS_KEYS = [
     "mapping_max_depth",
     "allow_self_validation",
     "evidence_four_eyes",
+    "auto_lock_overdue_assessments",
     "auto_ref_id",
     "auto_ref_id_prefixes",
     "show_warning_external_links",
@@ -320,11 +321,9 @@ class GeneralSettingsSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {"disabled_email_templates": "Must be a list of template keys."}
                     )
-            if key == "chat_temperature_enabled":
+            if key in ("chat_temperature_enabled", "auto_lock_overdue_assessments"):
                 if not isinstance(value, bool):
-                    raise serializers.ValidationError(
-                        {"chat_temperature_enabled": "Must be a boolean."}
-                    )
+                    raise serializers.ValidationError({key: "Must be a boolean."})
             if key == "chat_temperature":
                 try:
                     temp = float(value)
@@ -709,12 +708,10 @@ class FeatureFlagsSerializer(serializers.ModelSerializer):
         value = attrs.get("value") or {}
         # sign-in keeps each authorization code in the cache until the app
         # redeems it, possibly on another worker
-        if (value.get("mcp") or value.get("mcp_write")) and not has_shared_cache():
+        enabled = [f for f in ("mcp", "mcp_write") if value.get(f)]
+        if enabled and not has_shared_cache():
             raise serializers.ValidationError(
-                {
-                    "mcp": "AI app connections need a shared cache (memcached): "
-                    "configure it first."
-                }
+                {f: "errorMcpNeedsSharedCache" for f in enabled}
             )
         return attrs
 

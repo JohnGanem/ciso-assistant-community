@@ -13,6 +13,7 @@ import EvidenceChangeStatus from '#lib/components/ContextMenu/evidences/ChangeSt
 import WorkflowToggleActive from '#lib/components/ContextMenu/workflows/ToggleActive.svelte';
 import TaskNodeChangeStatus from '#lib/components/ContextMenu/task-nodes/ChangeStatus.svelte';
 import { getModelInfo, isFieldFlagEnabled } from './crud';
+import { folderBatchActions } from '#lib/utils/folder-batch-actions.js';
 import { toCamelCase } from './locales';
 import SelectObject from '#lib/components/ContextMenu/ebios-rm/SelectObject.svelte';
 import ChangePriority from '#lib/components/ContextMenu/applied-controls/ChangePriority.svelte';
@@ -251,12 +252,16 @@ export const COMMITMENT_STATE_FILTER: ListViewFilterConfig = {
 	}
 };
 
+// Pickers hide deactivated users; filters must not, since filtering on a
+// departed owner is how their leftover items get found and reassigned.
+const ACTOR_FILTER_ENDPOINT = 'actors?include_inactive=true';
+
 export const COMMITMENT_OWNER_FILTER: ListViewFilterConfig = {
 	component: AutocompleteSelect,
 	props: {
 		lazy: true,
 		label: 'committedBy',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
 		multiple: true
@@ -1129,7 +1134,7 @@ export const TASK_TEMPLATE_ASSIGNED_TO_FILTER: ListViewFilterConfig = {
 		label: 'assigned_to',
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		multiple: true
 	}
 };
@@ -1141,7 +1146,7 @@ export const AUTHOR_FILTER: ListViewFilterConfig = {
 		label: 'authors',
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		multiple: true
 	}
 };
@@ -1594,7 +1599,7 @@ export const OWNER_FILTER: ListViewFilterConfig = {
 		label: 'owner',
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		multiple: true
 	}
 };
@@ -1606,7 +1611,7 @@ export const FINDINGS_OWNER_FILTER: ListViewFilterConfig = {
 		label: 'owner',
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		multiple: true
 	}
 };
@@ -1764,7 +1769,7 @@ export const EVIDENCE_OWNER_FILTER: ListViewFilterConfig = {
 		label: 'owner',
 		optionsLabelField: 'str',
 		optionsValueField: 'id',
-		optionsEndpoint: 'actors',
+		optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 		multiple: true,
 		enableDoubleDash: true
 	}
@@ -3778,8 +3783,8 @@ export const listViewFields = {
 			'filtering_labels'
 		],
 		optionalFields: {
-			head: ['enabled', 'createdAt', 'updatedAt'],
-			body: ['enabled', 'created_at', 'updated_at']
+			head: ['appliedControls', 'enabled', 'createdAt', 'updatedAt'],
+			body: ['applied_controls', 'enabled', 'created_at', 'updated_at']
 		},
 		filters: {
 			folder: DOMAIN_FILTER,
@@ -3985,6 +3990,10 @@ export const listViewFields = {
 			'last_refresh',
 			'folder'
 		],
+		optionalFields: {
+			head: ['collectionFrequency'],
+			body: ['collection_frequency']
+		},
 		filters: {
 			folder: DOMAIN_FILTER,
 			metric_definition: {
@@ -4010,7 +4019,7 @@ export const listViewFields = {
 				component: AutocompleteSelect,
 				props: {
 					lazy: true,
-					optionsEndpoint: 'actors',
+					optionsEndpoint: ACTOR_FILTER_ENDPOINT,
 					optionsLabelField: 'str',
 					label: 'owner',
 					multiple: true
@@ -4231,6 +4240,9 @@ export interface BatchActionConfig {
 	minSelection?: number;
 	maxSelection?: number;
 	confirmMessage?: string; // i18n key for an extra confirm warning, receives {count}
+	/** A change_field on `parent_folder` of domains: picked from the domain tree with
+	 * the selection's subtrees pruned, after a preview of what the domains carry along. */
+	moveFolders?: boolean;
 }
 
 export interface ParentActionConfig {
@@ -4957,6 +4969,7 @@ export const batchActions: Partial<Record<urlModel, BatchActionConfig[]>> = {
 		},
 		{ type: 'delete', label: 'delete', icon: 'fa-solid fa-trash' }
 	],
+	folders: folderBatchActions,
 	'metric-instances': [
 		{
 			type: 'compose',
